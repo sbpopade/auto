@@ -1,0 +1,16 @@
+server_emulator ansible_ssh_host=172.17.2.28 testbed_name=testbed2
+packet_generator ansible_ssh_host=172.17.2.10 ansible_become_user=platina ansible_become_pass=regressi0n testbed_name=testbed2
+
+invader42 ansible_ssh_host=172.17.2.42 bmc_redis_ip=172.17.3.42 testbed_name=testbed2 tel_ip=172.17.3.100 tel_port=10021 tel_user=platina tel_pass=plat1na sudo_pass=plat1na
+invader43 ansible_ssh_host=172.17.2.43 bmc_redis_ip=172.17.3.43 testbed_name=testbed2 tel_ip=172.17.3.100 tel_port=10022 tel_user=platina tel_pass=plat1na sudo_pass=plat1na
+invader44 ansible_ssh_host=172.17.2.44 bmc_redis_ip=172.17.3.44 testbed_name=testbed2 tel_ip=172.17.3.100 tel_port=10023 tel_user=platina tel_pass=plat1na sudo_pass=plat1na
+invader45 ansible_ssh_host=172.17.2.45 bmc_redis_ip=172.17.3.45 testbed_name=testbed2 tel_ip=172.17.3.100 tel_port=10024 tel_user=platina tel_pass=plat1na sudo_pass=plat1na
+
+[spine]
+invader43
+invader42
+
+
+[leaf]
+invader45
+invader44

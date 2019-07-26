@@ -1,0 +1,26 @@
+---
+
+- hosts: leaf[0]:spine[0]
+  become: true
+  tasks:
+    - name: Copy port provisioned interfaces_100g_10g_25g_50g_cr_fec_cl91_autoneg_off file to /etc/network/interfaces
+      template:
+        src: "../../files/{{ inventory_hostname }}/interfaces_100g_10g_25g_50g_cr_fec_cl91_autoneg_off"
+        dest: "{{ network_interfaces_file }}"
+
+#    - name: Copy goesd-platina-mk1-modules.conf file
+ #     template:
+  #      src: "../../files/goesd-platina-mk1-modprobe.conf_100g_10g_25g_50g"
+   #     dest: "{{ goesd_modprobe_file }}"
+
+    - name: Testing temp module
+      test_fiber_ports:
+        cmd: '1,1,4,1,4,1,2,1,4,1,4,1,4,1,2,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1'
+      register:
+        module_out
+
+    - debug:
+        var: module_out
+
+# include: port_provision_reset.yml
+#  when: reset_config

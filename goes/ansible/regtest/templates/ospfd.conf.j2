@@ -1,0 +1,29 @@
+!
+!
+!
+!
+hostname ospfd
+password zebra
+!
+!
+!
+interface eth-{{ interface1 }}-{{ subport }}
+!
+interface eth-{{ interface2 }}-{{ subport }}
+!
+interface eth-{{ interface3 }}-{{ subport }}
+!
+interface eth-{{ interface4 }}-{{ subport }}
+!
+router ospf
+ ospf router-id {{ ansible_ssh_host }}
+ log-adjacency-changes
+ redistribute connected
+ network {{ first_octet1 }}.{{ interface1 }}.{{ subport }}.0/24 area 0.0.0.0
+ network {{ first_octet3 }}.{{ interface2 }}.{{ subport }}.0/24 area 0.0.0.0
+ network {{ first_octet2 }}.{{ interface3 }}.{{ subport }}.0/24 area 0.0.0.0
+ network {{ first_octet3 }}.{{ interface4 }}.{{ subport }}.0/24 area 0.0.0.0
+!
+line vty
+!
+

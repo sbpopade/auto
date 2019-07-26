@@ -1,0 +1,7 @@
+---
+container_name: S0_vlan_single
+interface1: 19
+interface2: 1
+vlan_id1: 19
+vlan_id2: 1
+

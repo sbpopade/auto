@@ -1,0 +1,14 @@
+all:
+  hosts:
+    localhost:
+      ansible_connection: local
+  children:
+    webservers:
+      hosts:
+        suraj:
+          ansible_ssh_user: '{{ platina_ssh_user }}'
+          ansible_ssh_pass: '{{ platina_ssh_pass }}'
+          ansible_sudo_pass: '{{ platina_ssh_pass }}'
+          ansible_host: 172.17.2.10
+          ip: 172.17.2.10
+

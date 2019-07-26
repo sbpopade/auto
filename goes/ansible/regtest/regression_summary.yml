@@ -1,0 +1,121 @@
+---
+
+- hosts: leaf:spine
+  become: true
+  ignore_errors: yes
+  gather_facts: no
+  tasks:
+    - name: Get GoES version details
+      shell: "goes version"
+      register: goes_version
+
+    - name: Print GoES version details
+      debug:
+        var: goes_version.stdout_lines
+
+    - name: Get GoES Build ID
+      shell: "goes show buildid"
+      register: goes_build_id
+
+    - name: Print GoES Build ID
+      debug:
+        var: goes_build_id.stdout_lines
+
+    - name: Get GoES tag details
+      shell: "/usr/lib/goes/vnet-platina-mk1 version"
+      register: goes_tags
+
+    - name: Print GoES tag details
+      debug:
+        var: goes_tags.stdout_lines
+
+    - name: Get GoES vnetd Build ID
+      shell: "goes buildid /usr/lib/goes/vnet-platina-mk1"
+      register: goes_vnetd_id
+
+    - name: Print GoES vnetd Build ID
+      debug:
+        var: goes_vnetd_id.stdout_lines
+
+    - name: Get kernel version info
+      shell: dpkg --list | grep kernel
+      register: kernel_version
+
+    - name: Print kernel version info
+      debug:
+        var: kernel_version.stdout_lines
+
+    - set_fact:
+        goes_version: "{{ goes_version.stdout }}"
+        goes_build_id: "{{ goes_build_id.stdout }}"
+        goes_tags: "{{ goes_tags.stdout }}"
+        goes_vnetd_id: "{{ goes_vnetd_id.stdout }}"
+        kernel_version: "{{ kernel_version.stdout }}"
+
+
+- hosts: server_emulator
+  become: true
+  gather_facts: no
+  tasks:
+    - name: Get the regression summary report
+      shell: cat "{{ regression_summary_report }}"
+      register: summary_report
+
+    - name: Print the regression summary report
+      debug:
+        var: summary_report.stdout_lines
+
+    - name: Summarize the regerssion suite result
+      summarize_regression:
+        testbed_name: "{{ testbed_name }}"
+        playbook_dir: "{{ playbook_dir }}"
+        goes_version: "<br><b>{{ groups['leaf'][0] }}:</b> {{ hostvars[groups['leaf'][0]].goes_version }}, <br><b>{{ groups['leaf'][1] }}:</b> {{ hostvars[groups['leaf'][1]].goes_version }}, <br><b>{{ groups['spine'][0] }}:</b> {{ hostvars[groups['spine'][0]].goes_version }}, <br><b>{{ groups['spine'][1] }}:</b> {{ hostvars[groups['spine'][1]].goes_version }}"
+        goes_build_id: "<br><b>{{ groups['leaf'][0] }}:</b> {{ hostvars[groups['leaf'][0]].goes_build_id }}, <br><b>{{ groups['leaf'][1] }}:</b> {{ hostvars[groups['leaf'][1]].goes_build_id }}, <br><b>{{ groups['spine'][0] }}:</b> {{ hostvars[groups['spine'][0]].goes_build_id }}, <br><b>{{ groups['spine'][1] }}:</b> {{ hostvars[groups['spine'][1]].goes_build_id }}"
+        goes_tags: "<br><b>{{ groups['leaf'][0] }}:</b> {{ hostvars[groups['leaf'][0]].goes_tags }}, <br><b>{{ groups['leaf'][1] }}:</b> {{ hostvars[groups['leaf'][1]].goes_tags }}, <br><b>{{ groups['spine'][0] }}:</b> {{ hostvars[groups['spine'][0]].goes_tags }}, <br><b>{{ groups['spine'][1] }}:</b> {{ hostvars[groups['spine'][1]].goes_tags }}"
+        goes_vnetd_id: "<br><b>{{ groups['leaf'][0] }}:</b> {{ hostvars[groups['leaf'][0]].goes_vnetd_id }}, <br><b>{{ groups['leaf'][1] }}:</b> {{ hostvars[groups['leaf'][1]].goes_vnetd_id }}, <br><b>{{ groups['spine'][0] }}:</b> {{ hostvars[groups['spine'][0]].goes_vnetd_id }}, <br><b>{{ groups['spine'][1] }}:</b> {{ hostvars[groups['spine'][1]].goes_vnetd_id }}"
+        kernel_version: "<br><b>{{ groups['leaf'][0] }}:</b> {{ hostvars[groups['leaf'][0]].kernel_version }}, <br><b>{{ groups['leaf'][1] }}:</b> {{ hostvars[groups['leaf'][1]].kernel_version }}, <br><b>{{ groups['spine'][0] }}:</b> {{ hostvars[groups['spine'][0]].kernel_version }}, <br><b>{{ groups['spine'][1] }}:</b> {{ hostvars[groups['spine'][1]].kernel_version }}"
+      register: out
+
+    - set_fact:
+        build: "{{ main_job_build }}"
+        toe: "{{ time }}"
+        passed_count: "{{ out.passed_count }}"
+        passed_list: "{{ out.passed_list }}"
+        failed_count: "{{ out.failed_count }}"
+        failed_list: "{{ out.failed_list }}"
+        skipped_count: "{{ out.skipped_count }}"
+        skipped_list: "{{ out.skipped_list }}"
+        subject: "{{ out.subject }}"
+        invader_list: "{{ groups['leaf'][0] }}, {{ groups['leaf'][1] }}, {{ groups['spine'][0] }}, {{ groups['spine'][1] }}, "
+        goes_version: "{{ out.goes_version }}"
+        goes_build_id: "{{ out.goes_build_id }}"
+        goes_tags: "{{ out.goes_tags }}"
+        goes_vnetd_id: "{{ out.goes_vnetd_id }}"
+        kernel_version: "{{ out.kernel_version }}"
+        host_file: "{{ host_file }}"
+
+    - name: Create the html email content
+      template:
+        src: "templates/email_body.j2"
+        dest: "{{ playbook_dir }}/email_body"
+
+    - copy:
+        src: "files/logs.html"
+        dest: "/var/www/html/regression_logs/logs.html"
+
+    - template:
+        src: "templates/passed_list.j2"
+        dest: "/var/www/html/regression_logs/passed_list_{{ build }}.html"
+
+    - template:
+        src: "templates/failed_list.j2"
+        dest: "/var/www/html/regression_logs/failed_list_{{ build }}.html"
+
+    - template:
+        src: "templates/skipped_list.j2"
+        dest: "/var/www/html/regression_logs/skipped_list_{{ build }}.html"
+
+    - name: Check summary report for failures
+      fail:
+        msg: "Regression Failed"
+      when: summary_report.stdout.find('Failed') != -1

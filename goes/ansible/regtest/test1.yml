@@ -1,0 +1,11 @@
+---
+- hosts: packet_generator
+  #gather_facts: no
+  ignore_errors: yes
+  tasks:
+    - name: initiate traffic
+      initiate_traffic:
+        switch_name: "{{ inventory_hostname }}"
+        target_switch: "{{ groups['leaf'][0] }}"
+      ignore_errors: yes
+      when: not dry_run

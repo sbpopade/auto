@@ -1,0 +1,206 @@
+---
+
+- hosts: leaf:spine
+  become: true
+  ignore_errors: yes
+  tasks:
+    - shell: dpkg --list | grep kernel
+      register: kernel_version
+
+    - debug:
+        var: kernel_version.stdout_lines
+
+
+- hosts: server_emulator
+  become: true
+  tasks:
+    - command: "date +%Y%m%d%T"
+      register: start_time
+
+    - set_fact:
+        hash_name: "link_flap_10g_lane1count4_{{ start_time.stdout }}"
+        start_time: "{{ start_time.stdout }}"
+
+
+- hosts: leaf:spine
+  become: true
+  tasks:
+    - file:
+        path: "{{ link_flap_log_dir }}"
+        state: directory
+      when: not dry_run
+
+    - name: Copy port provisioned interfaces_10g_cr_fec_cl74_autoneg_off_lanes_1_count_4 file to /etc/network/interfaces
+      template:
+        src: "../../files/{{ inventory_hostname }}/interfaces_10g_cr_fec_cl74_autoneg_off_lanes_1_count_4"
+        dest: "{{ network_interfaces_file }}"
+      when: not dry_run
+
+    - name: Copy goesd-platina-mk1-modprobe.conf file
+      template:
+        src: "../../files/goesd-platina-mk1-modprobe.conf_lane1_count4"
+        dest: "{{ goesd_modprobe_file }}"
+      when: not dry_run
+
+    - name: Update interfaces file for fiber ports
+      test_fiber_ports:
+        cmd: "4,1,4,1,4,1,4,1,4,1,4,1,4,1,4,1,4,1,4,1,4,1,4,1,4,1,4,1,4,1,4,1"
+        remove: False
+        speed: 10
+      register: fmodule_out
+    
+    - name: Restart goes
+      command: "{{ item }}"
+      with_items:
+        - 'rmmod platina-mk1'
+        - "modprobe platina-mk1 provision={{ fmodule_out.hash_dict['command'] }}"
+        - 'ifdown -a --allow vnet'
+        - 'ifup -a --allow vnet'
+        - 'goes restart'
+      when: not dry_run
+
+    - set_fact:
+        commands: "{{ item }}"
+      with_items:
+        - 'rmmod platina-mk1'
+        - "modprobe platina-mk1 provision={{ fmodule_out.hash_dict['command'] }}"
+        - 'ifdown -a --allow vnet'
+        - 'ifup -a --allow vnet'
+        - 'goes restart'
+      when: dry_run
+
+    - name: Wait few seconds for GOES to come up
+      pause:
+        seconds: 10
+      when: not dry_run
+
+    - name: Add flapping script to invaders
+      copy:
+        src: ../../files/flap
+        dest: /tmp/flap
+        mode: 0755
+      when: not dry_run
+
+    - name: Verify the link status
+      test_link_status:
+        switch_name: "{{ inventory_hostname }}"
+        stage: "before"
+        retries: "{{ package_retry }}"
+        delay: "{{ package_delay }}"
+        f_ports: "{{ fmodule_out.hash_dict['eth_list'] }}"
+        speed: "10g"
+        sub: [1,2,3,4]
+        hash_name: "{{ hostvars['server_emulator']['hash_name'] }}"
+        log_dir_path: "{{ link_flap_log_dir }}"
+      register: module_out
+      when: not dry_run
+
+    - name: Flap the links 200 times
+      shell: /tmp/./flap 4 200
+      when: not dry_run
+
+    - name: Wait few seconds
+      pause:
+        seconds: 10
+
+    - name: Verify the link status
+      test_link_status:
+        switch_name: "{{ inventory_hostname }}"
+        retries: "{{ package_retry }}"
+        delay: "{{ package_delay }}"
+        f_ports: "{{ fmodule_out.hash_dict['eth_list'] }}"
+        stage: "after"
+        sub: [1,2,3,4]
+        hash_name: "{{ hostvars['server_emulator']['hash_name'] }}"
+        log_dir_path: "{{ link_flap_log_dir }}"
+      register: module_out
+      when: not dry_run
+
+    - name: Check goes status
+      restart_and_check_goes_status:
+        is_restart: False
+        switch_name: "{{ inventory_hostname }}"
+        hash_name: "{{ hostvars['server_emulator']['hash_name'] }}"
+        log_dir_path: "{{ link_flap_log_dir }}"
+      register: module_out
+
+    - set_fact:
+        dry_run_cmds: "{{ dry_run_out.cmds }}"
+      when: dry_run
+
+    - command: "date +%Y%m%d%T"
+      register: end_time
+      when: not dry_run
+
+    - name: Fetch the log file
+      slurp:
+        src: "{{ module_out.log_file_path }}"
+      register: logs
+      when: not dry_run
+
+    - name: Store the test result in a hash in redis db on server emulator
+      store_result_in_redis:
+        hash_name: "{{ hostvars['server_emulator']['hash_name'] }}"
+        start_time: "{{ hostvars['server_emulator']['start_time'] }}"
+        end_time: "{{ end_time.stdout }}"
+        hash_dict: "{{ module_out.hash_dict }}"
+        log_content: "{{ logs['content'] | b64decode }}"
+      delegate_to: 127.0.0.1
+      ignore_errors: yes
+      when: not dry_run
+
+    - copy:
+        src: "../../files/show_tech.py"
+        dest: /tmp/show_tech.py
+        mode: 0755
+      when: module_out.hash_dict['result.status'] == "Failed"
+      ignore_errors: yes
+
+    - command: "/tmp/./show_tech.py --path /var/log/show_tech/ --hash_name {{ hostvars['server_emulator']['hash_name'] }}"
+      when: module_out.hash_dict['result.status'] == "Failed"
+      ignore_errors: yes
+
+    - file:
+        path: /tmp/show_tech.py
+        state: absent
+      when: module_out.hash_dict['result.status'] == "Failed"
+      ignore_errors: yes
+
+    - include: ../../playbooks/get_goes_version_and_tags.yml
+      when: not dry_run
+
+    - name: Remove flapping script
+      file:
+        path: /tmp/flap
+        state: absent
+
+
+- include: ../port_provision/port_provision_reset.yml
+  when:
+    - reset_config
+    - not dry_run
+
+
+- hosts: server_emulator
+  become: true
+  tasks:
+    - name: Get the test result from redis db
+      get_test_result_from_redis:
+        hash_name: "{{ hostvars['server_emulator']['hash_name'] }}"
+      register: result
+      when: not dry_run
+
+    - name: Print test case result
+      debug:
+        msg: "Test case result: {{ result.result_status }}"
+      when: not dry_run
+
+    - name: Print failure summary
+      debug:
+        msg: "Failure summary: {{ result.result_detail }}"
+      when: not dry_run
+
+    - lineinfile:
+        path: "{{ regression_summary_report }}"
+        line: "{{ hash_name }}: {{ result.result_status }}"
+      when: not dry_run

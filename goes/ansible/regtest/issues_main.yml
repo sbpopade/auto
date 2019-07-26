@@ -1,0 +1,42 @@
+---
+
+# Reset invaders
+- include: playbooks/master_reset_invaders.yml
+
+# Uninstall packages stack
+- include: playbooks/installation/uninstall_packages.yml
+
+# Run all Issues test cases
+- include: playbooks/issues/issue_6_panic_after_sh_ip_fib.yml
+
+- include: playbooks/issues/issue_20_autoneg_ports_doesnt_come_up.yml
+
+- include: playbooks/issues/issue_26_deleting_dummy_interface_causes_panic.yml
+
+- include: playbooks/issues/issue_32_deleting_XETH_interface_cause_vnetd_to_panic.yml
+
+- include: playbooks/issues/issue_44_vnet_crashes_when_adding_7th_path_to_ECMP.yml
+
+- include: playbooks/issues/issue_51_cannot_assign_same_ip_to_two_different_containers.yml
+
+- include: playbooks/issues/issue_54_moving_sriov_interface_into_docker.yml
+
+- include: playbooks/issues/issue_55_secondary_ip_address.yml
+
+- include: playbooks/issues/issue_56_vnet_show_ip_fib_summary.yml
+
+- include: playbooks/issues/issue_57_namespace_crashes_when_link_goes_down.yml
+
+- include: playbooks/issues/issue_61_large_100b_ping_between_invaders_fails.yml
+
+- include: playbooks/issues/issue_78_ifconfig_state_out_of_sync.yml
+
+- include: playbooks/issues/issue_103_redis_not_gracefully_handling_hset_on_invalid_subports.yml
+
+- include: playbooks/issues/issue_hping_not_working_on_links.yml
+
+#- include: playbooks/issues/issue_7_redis_not_up_during_goes_restart.yml
+
+# Reset the setup
+- include: playbooks/master_reset_invaders.yml
+

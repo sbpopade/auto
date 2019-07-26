@@ -1,0 +1,226 @@
+---
+
+- hosts: leaf:spine
+  become: true
+  ignore_errors: yes
+  tasks:
+    - shell: dpkg --list | grep kernel
+      register: kernel_version
+
+    - debug:
+        var: kernel_version.stdout_lines
+
+
+- include: ../installation/snmp_install.yml
+
+
+- hosts: server_emulator
+  become: true
+
+  tasks:
+    - command: "date +%Y%m%d%T"
+      register: start_time
+
+    - set_fact:
+        hash_name: "SNMP_trap_v2_community_{{ start_time.stdout }}"
+        start_time: "{{ start_time.stdout }}"
+
+
+- hosts: leaf[0]:spine[0]
+  become: true
+  tasks:
+    - file:
+        path: "{{ snmptrapd_log_dir }}"
+        state: directory
+
+    - name: Copy snmpd.conf to remote nachine
+      copy:
+        src: "../../files/{{ inventory_hostname }}/snmpd.conf"
+        dest: "{{ snmpd_conf_file }}"
+
+    - name: Copy snmp.conf to the remote machine
+      copy:
+        src: "../../files/{{ inventory_hostname }}/snmp.conf"
+        dest: "{{ snmp_conf_file }}"
+
+
+- hosts: leaf[0]:spine[0]
+  become: true
+  tasks:
+    - name: Copy if.mib file to remote machine
+      copy:
+        src: "../../files/if.mib"
+        dest: "{{ snmp_if_mib_file }}"
+
+    - name: Restart snmpd
+      command: "service snmpd restart"
+
+    - name: Wait for some time to restart snmpd
+      pause:
+        seconds: 35
+
+    - name: Check status of the snmpd service
+      command: "service snmpd status"
+
+
+- hosts: leaf[0]:spine[0]
+  become: true
+  tasks:
+
+    - name: Install snmptrapd
+      apt:
+        name: snmptrapd
+
+    - name: Copy snmptrapd.conf
+      copy:
+        src: "../../files/{{ inventory_hostname }}/snmptrapd.conf"
+        dest: "{{ snmptrapd_conf_file }}"
+
+    - name: Copy snmptrapd file
+      copy:
+        src: "../../files/{{ inventory_hostname }}/snmptrapd"
+        dest: "{{ snmptrapd_file }}"
+
+    - name: Restart snmptrapd service
+      command: "/etc/init.d/snmptrapd restart"
+
+    - name: Wait few seconds to restart snmptrapd service
+      pause:
+        seconds: 35
+
+    - name: Check the status of the snmptrapd service
+      command: "/etc/init.d/snmptrapd status"
+
+
+#- hosts: spine[0]
+#  become: true
+#  tasks:
+#
+#    - name: From spine, generate smnptraps using given OIDs.
+#      command: "snmptrap -v 2c  -c public 172.17.2.{{ groups['leaf'][0][-2::] }} 456 {{ item }}"
+#      loop:
+#        - 1.3.6.1.6.3.1.1.5.3
+#        - 1.3.6.1.6.3.1.1.5.4
+#        - 1.3.6.1.6.3.1.1.5.1
+#      loop_control:
+#        pause: 2
+    # snmpd 43 restart
+
+
+- hosts: leaf[0]
+  become: true
+  tasks:
+    - name: Verify the traps from file /var/log/traps.log
+      test_snmp_traps:
+        switch_name: "{{ inventory_hostname }}"
+        log_path: "/var/log/traps.log"
+        package_name: "snmpd"
+        restart: "before"
+        hash_name: "{{ hostvars['server_emulator']['hash_name'] }}"
+        log_dir_path: "{{ snmptrapd_log_dir }}"
+      register: module_out
+
+
+- hosts: leaf[0]:spine[0]
+  become: true
+  tasks:
+
+    - name: Restart snmpd
+      command: "service snmpd restart"
+
+    - name: Wait for some time to restart snmpd
+      pause:
+        seconds: 35
+
+    - name: Check status of the snmpd service
+      command: "service snmpd status"
+
+
+- hosts: spine[0]
+  become: true
+  tasks:
+    - name: From spine, generate smnptraps using given OIDs.
+      command: "snmptrap -v 2c  -c public 172.17.2.{{ groups['leaf'][0][-2::] }} 456 {{ item }}"
+      loop:
+        - 1.3.6.1.6.3.1.1.5.3
+        - 1.3.6.1.6.3.1.1.5.4
+        - 1.3.6.1.6.3.1.1.5.1
+      loop_control:
+        pause: 2
+
+
+- hosts: leaf[0]
+  become: true
+  tasks:
+    - name: Verify the traps from file /var/log/traps.log
+      test_snmp_traps:
+        switch_name: "{{ inventory_hostname }}"
+        log_path: "/var/log/traps.log"
+        package_name: "snmpd"
+        restart: "after"
+        hash_name: "{{ hostvars['server_emulator']['hash_name'] }}"
+        log_dir_path: "{{ snmptrapd_log_dir }}"
+      register: module_out
+
+    - command: "date +%Y%m%d%T"
+      register: end_time
+
+    - name: Fetch the log file
+      slurp:
+        src: "{{ module_out.log_file_path }}"
+      register: logs
+
+    - name: Store the test result in a hash in redis db on server emulator
+      store_result_in_redis:
+        hash_name: "{{ hostvars['server_emulator']['hash_name'] }}"
+        start_time: "{{ hostvars['server_emulator']['start_time'] }}"
+        end_time: "{{ end_time.stdout }}"
+        hash_dict: "{{ module_out.hash_dict }}"
+        log_content: "{{ logs['content'] | b64decode }}"
+      delegate_to: 127.0.0.1
+
+    - copy:
+        src: "../../files/show_tech.py"
+        dest: /tmp/show_tech.py
+        mode: 0755
+      when: module_out.hash_dict['result.status'] == "Failed"
+      ignore_errors: yes
+
+    - command: "/tmp/./show_tech.py --path /var/log/show_tech/ --hash_name {{ hostvars['server_emulator']['hash_name'] }}"
+      when: module_out.hash_dict['result.status'] == "Failed"
+      ignore_errors: yes
+
+    - file:
+        path: /tmp/show_tech.py
+        state: absent
+      when: module_out.hash_dict['result.status'] == "Failed"
+      ignore_errors: yes
+
+    - include: ../../playbooks/get_goes_version_and_tags.yml
+
+
+- hosts: server_emulator
+  become: true
+  tasks:
+    - name: Get the test result from redis db
+      get_test_result_from_redis:
+        hash_name: "{{ hostvars['server_emulator']['hash_name'] }}"
+      register: result
+
+    - name: Print test case result
+      debug:
+        msg: "Test case result: {{ result.result_status }}"
+
+    - name: Print failure summary
+      debug:
+        msg: "Failure summary: {{ result.result_detail }}"
+
+    - lineinfile:
+        path: "{{ regression_summary_report }}"
+        line: "{{ hash_name }}: {{ result.result_status }}"
+
+
+- hosts: leaf:spine
+  become: true
+  tasks:
+    - include: ../../playbooks/get_goes_status.yml start_time={{ hostvars['server_emulator']['start_time'] }} hash_name={{ hostvars['server_emulator']['hash_name'] }}

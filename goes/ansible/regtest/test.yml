@@ -1,0 +1,20 @@
+---
+- hosts: leaf[0]
+  become: true
+  ignore_errors: yes
+  tasks:
+    - name: get the mac address details
+      shell: python -m getmac -i 'xeth4'
+      register: mac_address
+
+    - set_fact:
+        mac_address: "{{ mac_address.stdout }}"
+
+ 
+- hosts: packet_generator
+  gather_facts: no
+  ignore_errors: yes
+  tasks:
+    - debug:
+        var: hostvars['{{ groups['leaf'][0] }}']['mac_address']
+

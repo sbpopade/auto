@@ -1,0 +1,23 @@
+---
+- hosts: leaf:spine
+  become: true
+  ignore_errors: yes
+  tasks:
+    - name: Copy default network interfaces file
+      template:
+          src: "../../files/{{inventory_hostname}}/network_interfaces_master"
+          dest: "{{ network_interfaces_file }}"
+
+    - name: Copy default goesd-platina-mk1-modprobe.conf file
+      copy:
+          src: "../../files/goesd-platina-mk1-modprobe.conf"
+          dest: "/etc/modprobe.d/goesd-platina-mk1-modprobe.conf"
+
+    - name: Goes restart
+      command: "{{ item }}"
+      with_items:
+          - 'rmmod platina-mk1'
+          - 'modprobe platina-mk1 provision=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1'
+          - 'ifdown -a --allow vnet'
+          - 'ifup -a --allow vnet'
+          - 'goes restart'

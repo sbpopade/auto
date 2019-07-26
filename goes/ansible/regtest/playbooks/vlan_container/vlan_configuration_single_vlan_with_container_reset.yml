@@ -1,0 +1,125 @@
+---
+
+- hosts: spine[1]
+  become: true
+
+  vars:
+    - containers: 'S1_vlan_single'
+
+  tasks:
+    - name: Bring down all containers
+      vlan_updown:
+        config_file: "{{ lookup('file', '../../group_vars/{{ inventory_hostname }}/{{ containers }}') }}"
+        state: 'down'
+
+    - name: Run docker-compose down
+      shell: "docker-compose down"
+      args:
+        chdir: ~/
+
+
+- hosts: spine[0]
+  become: true
+  vars:
+    - containers: 'S0_vlan_single'
+
+  tasks:
+    - name: Bring down all containers
+      vlan_updown:
+        config_file: "{{ lookup('file', '../../group_vars/{{ inventory_hostname }}/{{ containers }}') }}"
+        state: 'down'
+
+    - name: Run docker-compose down
+      shell: "docker-compose down"
+      args:
+        chdir: ~/
+
+
+- hosts: leaf[0]
+  become: true
+  vars:
+    - containers: 'L0_vlan_single'
+
+  tasks:
+    - name: Bring down all containers
+      vlan_updown:
+        config_file: "{{ lookup('file', '../../group_vars/{{ inventory_hostname }}/{{ containers }}') }}"
+        state: 'down'
+
+    - name: Run docker-compose down
+      shell: "docker-compose down"
+      args:
+        chdir: ~/
+
+
+- hosts: leaf[1]
+  become: true
+  vars:
+    - containers: 'L1_vlan_single'
+
+  tasks:
+    - name: Bring down all containers
+      vlan_updown:
+        config_file: "{{ lookup('file', '../../group_vars/{{ inventory_hostname }}/{{ containers }}') }}"
+        state: 'down'
+
+    - name: Run docker-compose down
+      shell: "docker-compose down"
+      args:
+        chdir: ~/
+
+
+- hosts: leaf:spine
+  become: true
+  ignore_errors: yes
+  tasks:
+    - name: Remove docker-compose files
+      file:
+        path: "{{ item }}"
+        state: absent
+      with_items:
+      - "~/docker_move.sh"
+      - "{{ docker_compose_file }}"
+
+    - shell: rm -rf ~/volumes/quagga/*
+
+    - shell: "ip netns | xargs -I {} sudo ip netns delete {}"
+
+    - name: Restore backup of /etc/quagga/ospfd.conf
+      copy:
+        src: "{{ quagga_ospf_conf_file_bck }}"
+        dest: "{{ quagga_ospf_conf_file }}"
+        remote_src: true
+
+    - name: Remove backup file
+      file:
+        path: "{{ quagga_ospf_conf_file_bck }}"
+        state: absent
+
+    - name: Restart quagga
+      service:
+        name: quagga
+        state: restarted
+
+    - name: Restore backup of /etc/network/interfaces
+      copy:
+        src: "{{ network_interfaces_file_bck }}"
+        dest: "{{ network_interfaces_file }}"
+        remote_src: true
+
+    - name: Remove backup file
+      file:
+        path: "{{ network_interfaces_file_bck }}"
+        state: absent
+
+    - name: Execute commands
+      command: "{{ item }}"
+      with_items:
+      - 'ifdown -a --allow vnet'
+      - 'ifup -a --allow vnet'
+      - 'goes restart'
+
+    - name: Wait few seconds for GOES to come up
+      pause:
+        seconds: 10
+

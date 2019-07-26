@@ -1,0 +1,17 @@
+---
+- name: Get goes version details
+  shell: "goes version"
+  register: version_out
+
+- name: Get goes vnetd details
+  shell: "/usr/lib/goes/vnet-platina-mk1 version"
+  register: tag_out
+
+- name: Store goes version and tag details in redis db
+  store_goes_details:
+    switch_name: "{{ inventory_hostname }}"
+    hash_name: "{{ hostvars['server_emulator']['hash_name'] }}"
+    version_details: "{{ version_out.stdout }}"
+    tag_details: "{{ tag_out.stdout }}"
+  delegate_to: 127.0.0.1
+  ignore_errors: yes

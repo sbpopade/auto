@@ -1,0 +1,32 @@
+---
+- hosts: packet_generator
+  gather_facts: no
+  #become: true
+  ignore_errors: yes
+  tasks:
+    - name: Copy the BCM file
+      copy:
+        src: "/../files/bcm.py"
+        dest: /etc/
+        mode: 0755
+
+    - name: Copy the file to stop the stream
+      template:
+        src: "/../templates/stop_stream_all"
+        dest: ~/
+        remote_src: yes
+        mode: 0755
+
+    - name: Copy the Snabb utility
+      copy:
+        src: /files/snabb.j2
+        dest: ~/tmp/snabb
+        mode: 0755
+
+    - name: Run the BCM file
+      shell: ./home/platina/bin/bcm.py "ps ce1"
+      when: not dry_run
+
+    - name: Stop all stream
+      shell: ./home/platina/bin/bcm.py "cint stoploop.cint"
+      when: not dry_run

@@ -1,0 +1,30 @@
+---
+- name: Get goes status
+  command: goes status
+  register: goes
+  ignore_errors: yes
+  retries: "{{ goes_retry }}"
+  delay: "{{ goes_delay }}"
+  until: goes.rc == 0 
+
+- name: Print goes status
+  debug:
+    var: goes.stdout
+  ignore_errors: yes
+
+- name: Check for core dump in syslog
+  check_core_dump:
+    switch_name: "{{ inventory_hostname }}"
+    start_time: "{{ start_time }}"
+    log_file_names: "/var/log/syslog"
+    error_msg: "panic"
+    hash_name: "{{ hash_name }}"
+  register: module_out
+  when: goes.stdout.find('Not OK') != -1 and start_time is defined and hash_name is defined
+
+- name: Store the test result in a hash in redis db on server emulator
+  store_coredump_result:
+    hash_name: "{{ hostvars['server_emulator']['hash_name'] }}"
+    hash_dict: "{{ module_out.hash_dict }}"
+  delegate_to: 127.0.0.1
+  when: goes.stdout.find('Not OK') != -1 and start_time is defined and hash_name is defined

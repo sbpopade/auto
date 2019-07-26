@@ -1,0 +1,75 @@
+---
+- hosts: leaf[0]
+  become: true
+  tasks:
+    - name: Delete static routes
+      command: "{{ item }}"
+      with_items:
+      - route del -net 192.168.42.0/24 gw 10.0.21.32
+      - route del -net 192.168.43.0/24 gw 10.0.7.31
+      ignore_errors: yes
+
+
+- hosts: leaf[1]
+  become: true
+  tasks:
+    - name: Delete static routes
+      command: "{{ item }}"
+      with_items:
+      - route del -net 192.168.42.0/24 gw 10.0.3.32
+      - route del -net 192.168.43.0/24 gw 10.0.19.31
+      ignore_errors: yes
+
+
+- hosts: spine[0]
+  become: true
+  tasks:
+    - name: Delete static routes
+      command: "{{ item }}"
+      with_items:
+      - route del -net 192.168.44.0/24 gw 10.0.19.30
+      - route del -net 192.168.45.0/24 gw 10.0.7.29
+      ignore_errors: yes
+
+
+- hosts: spine[1]
+  become: true
+  tasks:
+    - name: Delete static routes
+      command: "{{ item }}"
+      with_items:
+      - route del -net 192.168.44.0/24 gw 10.0.3.30
+      - route del -net 192.168.45.0/24 gw 10.0.21.29
+      ignore_errors: yes
+
+
+- hosts: leaf:spine
+  become: true
+  tasks:
+    - name: Restore backup of /etc/bird/bird.conf
+      copy:
+        src: "{{ bird_conf_file_bck }}"
+        dest: "{{ bird_conf_file }}"
+        remote_src: true
+        owner: root
+        group: root
+        mode: 0644
+
+    - name: Remove backup file
+      file:
+        path: "{{ bird_conf_file_bck }}"
+        state: absent
+
+    - name: Delete dummy interface
+      command: "ip link del dummy0 type dummy"
+
+    - name: Restart bird
+      service:
+        name: bird
+        state: restarted
+
+    - name: Execute commands
+      command: "{{ item }}"
+      with_items:
+      - 'goes restart'
+

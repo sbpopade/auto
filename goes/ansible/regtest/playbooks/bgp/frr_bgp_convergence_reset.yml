@@ -1,0 +1,48 @@
+---
+
+- hosts: leaf:spine
+  become: true
+  tasks:
+    - name: Restore backup of /etc/frr/bgpd.conf
+      copy:
+        src: "{{ frr_bgp_conf_file_bck }}"
+        dest: "{{ frr_bgp_conf_file }}"
+        remote_src: true
+      when: not dry_run
+
+    - name: Remove backup file
+      file:
+        path: "{{ frr_bgp_conf_file_bck }}"
+        state: absent
+      when: not dry_run
+
+
+- hosts: leaf:spine
+  become: true
+  tasks:
+    - name: Delete dummy interface
+      command: "ip link del dummy0 type dummy"
+      when: not dry_run
+
+
+- hosts: leaf:spine
+  become: true
+  tasks:
+    - name: Execute commands
+      command: "{{ item }}"
+      with_items:
+      - 'goes restart'
+      when: not dry_run
+
+    - command: goes status
+      retries: "{{ goes_retry }}"
+      delay: "{{ goes_delay }}"
+      register: result
+      until: result.rc == 0
+      when: not dry_run
+
+    - name: Restart frr
+      service:
+        name: frr
+        state: restarted
+      when: not dry_run

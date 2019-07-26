@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+
+    <head>
+        <title>To Open Log</title>
+        <style>
+            h1{
+                font-family: cursive
+            }
+            table {
+              font-family: cursive, sans-serif;
+              width: auto;
+              border: 1px solid black;
+              padding: 2px;
+              border-spacing: 8px;
+            }
+            td, th {
+              border: 1px solid #dddddd;
+              text-align: center;
+              padding: 20px;
+            }
+            tr:nth-child(even) {
+              background-color: #dddddd;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>REGRESSION STATUS SUMMARIZED</h1>
+        <h2>To see log of any Test Case</h2>
+        <ul>
+            <li>Login to invader28 [172.17.2.28] and execute following redis command</li>
+            <li><b>redis-cli -p 9090 --raw hget <i>hash_name</i> result.raw</b></li>
+            <li>e.g.- redis-cli -p 9090 --raw hget quagga_bgp_peering_ebgp_2018072400:51:23 result.raw</li>
+        </ul>
+        <p>Hash names are the links in previous page.</p><br><br>
+        <p>No logs found?</p>
+        <p>If the logs are too old that you are looking, would possibly be flushed or</p>
+        <p>logs of that case were too long to be stored in redis, in that case</p>
+        <p>logs for every invader are stored under <b>/var/log/regression/</b> directory on each invader.</p>
+        <p>Logs on each invaders are also viped out from time to time to save disk space.</p>
+
+    </body>
+</html>

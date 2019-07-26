@@ -1,0 +1,34 @@
+---
+
+- hosts: leaf:spine
+  become: yes
+  ignore_errors: yes
+  tasks:
+    - name: Restore backup of /etc/lldpd.d/xeth.conf
+      copy:
+        src: "{{ xeth_config_file_bck }}"
+        dest: "{{ xeth_config_file }}"
+        remote_src: true
+
+    - name: Remove backup file
+      file:
+        path: "{{ xeth_config_file_bck }}"
+        state: absent
+
+    - name: Copy default network interfaces file
+      template:
+        src: "../../files/{{inventory_hostname}}/network_interfaces_master"
+        dest: "{{ network_interfaces_file }}"
+
+    - name: Execute commands
+      command: "{{ item }}"
+      with_items:
+      - 'rmmod platina-mk1'
+      - 'modprobe platina-mk1 provision=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1'
+      - 'ifdown -a --allow vnet'
+      - 'ifup -a --allow vnet'
+      - 'goes restart'
+    
+    - name: Wait few seconds for GOES to come up
+      pause:
+        seconds: 10

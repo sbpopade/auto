@@ -1,0 +1,34 @@
+!
+!
+!
+!
+hostname {{ container_name }}
+password zebra
+!
+interface xeth{{ interface1 }}-1.{{ vlan_id1 }}
+ ipv6 nd suppress-ra
+!
+interface xeth{{ interface2 }}-1.{{ vlan_id2 }}
+ ipv6 nd suppress-ra
+!
+interface xeth{{ interface3 }}-1.{{ vlan_id3 }}
+ ipv6 nd suppress-ra
+!
+interface xeth{{ interface4 }}-1.{{ vlan_id4 }}
+ ipv6 nd suppress-ra
+!
+interface eth0
+ ipv6 nd suppress-ra
+!
+interface lo
+ link-detect
+!
+interface vnet
+ ipv6 nd suppress-ra
+!
+ip forwarding
+!
+!
+line vty
+!
+

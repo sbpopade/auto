@@ -1,0 +1,35 @@
+---
+
+- hosts: leaf[0]
+  become: true
+  ignore_errors: yes
+  tasks:
+    - name: Uninstall dhcp
+      apt:
+        name: isc-dhcp-server
+        state: absent
+        purge: yes
+        autoremove: yes
+
+
+- hosts: leaf:spine
+  ignore_errors: yes
+  become: yes
+  tasks:
+    - name: Copy default network interfaces file
+      template:
+        src: "../../files/{{inventory_hostname}}/network_interfaces_master"
+        dest: "{{ network_interfaces_file }}"
+
+    - name: Execute commands
+      command: "{{ item }}"
+      with_items:
+      - 'rmmod platina-mk1'
+      - 'modprobe platina-mk1 provision=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1'
+      - 'ifdown -a --allow vnet'
+      - 'ifup -a --allow vnet'
+      - 'goes restart'
+
+    - name: Wait few seconds for GOES to come up
+      pause:
+        seconds: 10

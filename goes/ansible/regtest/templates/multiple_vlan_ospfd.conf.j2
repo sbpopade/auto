@@ -1,0 +1,30 @@
+!
+!
+!
+!
+hostname ospfd
+password zebra
+log stdout
+!
+!
+!
+interface xeth{{ interface1 }}-1.{{ vlan_id1 }}
+!
+interface xeth{{ interface2 }}-1.{{ vlan_id2 }}
+!
+interface xeth{{ interface3 }}-1.{{ vlan_id3 }}
+!
+interface xeth{{ interface4 }}-1.{{ vlan_id4 }}
+!
+router ospf
+ospf router-id {{ ansible_ssh_host }}
+network 192.168.{{ vlan_id1 }}.0/24 area 0.0.0.0
+network 192.168.{{ vlan_id2 }}.0/24 area 0.0.0.0
+network 192.168.{{ vlan_id3 }}.0/24 area 0.0.0.0
+network 192.168.{{ vlan_id4 }}.0/24 area 0.0.0.0
+!
+interface vnet
+!
+line vty
+!
+

@@ -1,0 +1,27 @@
+---
+
+- hosts: leaf:spine
+  become: true
+  ignore_errors: yes
+  tasks:
+    - name: Remove advertise route
+      add_remove_route:
+        switch_name: "{{ inventory_hostname }}"
+        remove: True
+
+    - name: Delete dummy interface
+      command: "ip link del dummy0 type dummy"
+
+    - name: Remove config file
+      file:
+        path: "{{ gobgp_bgp_conf_file }}"
+        state: absent
+
+    - name: Execute commands
+      command: "{{ item }}"
+      with_items:
+      - 'goes restart'
+
+    - name: Wait few seconds for GOES to come up
+      pause:
+        seconds: 10

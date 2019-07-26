@@ -1,0 +1,484 @@
+---
+
+- hosts: leaf:spine
+  become: true
+  ignore_errors: yes
+  tasks:
+    - shell: dpkg --list | grep kernel
+      register: kernel_version
+
+    - debug:
+        var: kernel_version.stdout_lines
+
+
+- hosts: server_emulator
+  become: true
+
+  tasks:
+    - command: "date +%Y%m%d%T"
+      register: start_time
+
+    - set_fact:
+        hash_name: "vlan_configuration_lldp_vlan_container_{{ start_time.stdout }}"
+        start_time: "{{ start_time.stdout }}"
+
+
+- hosts: leaf:spine
+  become: true
+
+  tasks:
+    - name: Pull quagga container image from dockerhub
+      command: "docker pull stigt/debian-quagga:latest"
+
+    - name: Install docker compose
+      shell: "curl -L https://github.com/docker/compose/releases/download/1.17.0/docker-compose-`uname -s`-`uname -m` -o /usr/local/bin/docker-compose"
+
+    - name: Make docker-compose file executable
+      shell: "chmod +x /usr/local/bin/docker-compose"
+
+    - file:
+        path: "{{ docker_compose_file }}"
+        state: touch
+
+    - name: Create docker-compose file
+      lineinfile:
+        path: "{{ docker_compose_file }}"
+        line: "{{ item }}"
+      with_items:
+      - "version: '3'"
+      - "services:"
+
+    - name: Add docker_move.sh
+      copy:
+        src: ../../templates/docker_move.sh
+        dest: "~/docker_move.sh"
+        owner: root
+        group: root
+        mode: 0755
+
+
+- hosts: spine[1]
+  become: true
+
+  vars:
+    - containers: 'S1_vlan_single'
+
+  tasks:
+    - file:
+        path: "~/volumes/quagga/{{ containers }}"
+        state: directory
+
+    - name: Copy ospfd.conf and zebra.conf in respective containers
+      include: copy_config_files.yml container={{ containers }} ospfd_conf_file='single_vlan_ospfd.conf.j2' zebra_conf_file='single_vlan_zebra.conf.j2'
+
+    - name: Add container info in docker-compose file
+      include: update_docker_compose.yml container={{ containers }}
+
+    - name: Run docker-compose up
+      shell: "docker-compose up -d"
+      args:
+        chdir: ~/
+
+    - name: Bring up the container
+      vlan_updown:
+        switch_name: "{{ inventory_hostname }}"
+        leaf_list: "{{ groups['leaf'] }}"
+        config_file: "{{ lookup('file', '../../group_vars/{{ inventory_hostname }}/{{ containers }}') }}"
+        state: 'up'
+
+    - name: Install lldp package inside the containers
+      shell: "{{ item }}"
+      with_items:
+        - docker exec -i {{ containers }} apt-get update
+        - docker exec -i {{ containers }} apt-get install -y lldpd
+        - docker exec -i {{ containers }} service lldpd start
+
+- hosts: spine[0]
+  become: true
+
+  vars:
+    - containers: 'S0_vlan_single'
+
+  tasks:
+    - file:
+        path: "~/volumes/quagga/{{ containers }}"
+        state: directory
+
+    - include_vars:
+        file: ../../group_vars/{{ inventory_hostname }}/{{ containers }}
+
+    - name: Copy ospfd.conf and zebra.conf in respective containers
+      include: copy_config_files.yml container={{ containers }} ospfd_conf_file='single_vlan_ospfd.conf.j2' zebra_conf_file='single_vlan_zebra.conf.j2'
+
+    - name: Add container info in docker-compose file
+      include: update_docker_compose.yml container={{ containers }}
+
+    - name: Run docker-compose up
+      shell: "docker-compose up -d"
+      args:
+        chdir: ~/
+
+    - name: Bring up the container
+      vlan_updown:
+        switch_name: "{{ inventory_hostname }}"
+        leaf_list: "{{ groups['leaf'] }}"
+        config_file: "{{ lookup('file', '../../group_vars/{{ inventory_hostname }}/{{ containers }}') }}"
+        state: 'up'
+
+    - name: Install lldp package inside the containers
+      shell: "{{ item }}"
+      with_items:
+        - docker exec -i {{ containers }} apt-get update
+        - docker exec -i {{ containers }} apt-get install -y lldpd
+        - docker exec -i {{ containers }} service lldpd start
+
+
+- hosts: leaf[1]
+  become: true
+
+  vars:
+    - containers: 'L1_vlan_single'
+
+  tasks:
+    - file:
+        path: "~/volumes/quagga/{{ containers }}"
+        state: directory
+
+    - include_vars:
+        file: ../../group_vars/{{ inventory_hostname }}/{{ containers }}
+
+    - name: Copy ospfd.conf and zebra.conf in respective containers
+      include: copy_config_files.yml container={{ containers }} ospfd_conf_file='single_vlan_ospfd.conf.j2' zebra_conf_file='single_vlan_zebra.conf.j2'
+
+    - name: Add container info in docker-compose file
+      include: update_docker_compose.yml container={{ containers }}
+
+    - name: Run docker-compose up
+      shell: "docker-compose up -d"
+      args:
+        chdir: ~/
+
+    - name: Bring up the container
+      vlan_updown:
+        switch_name: "{{ inventory_hostname }}"
+        leaf_list: "{{ groups['leaf'] }}"
+        config_file: "{{ lookup('file', '../../group_vars/{{ inventory_hostname }}/{{ containers }}') }}"
+        state: 'up'
+
+    - name: Install lldp package inside the containers
+      shell: "{{ item }}"
+      with_items:
+        - docker exec -i {{ containers }} apt-get update
+        - docker exec -i {{ containers }} apt-get install -y lldpd
+        - docker exec -i {{ containers }} service lldpd start
+
+
+- hosts: leaf[0]
+  become: true
+
+  vars:
+    - containers: 'L0_vlan_single'
+
+  tasks:
+    - file:
+        path: "~/volumes/quagga/{{ containers }}"
+        state: directory
+
+    - include_vars:
+        file: ../../group_vars/{{ inventory_hostname }}/{{ containers }}
+
+    - name: Copy ospfd.conf and zebra.conf in respective containers
+      include: copy_config_files.yml container={{ containers }} ospfd_conf_file='single_vlan_ospfd.conf.j2' zebra_conf_file='single_vlan_zebra.conf.j2'
+
+    - name: Add container info in docker-compose file
+      include: update_docker_compose.yml container={{ containers }}
+
+    - name: Run docker-compose up
+      shell: "docker-compose up -d"
+      args:
+        chdir: ~/
+
+    - name: Bring up the container
+      vlan_updown:
+        switch_name: "{{ inventory_hostname }}"
+        leaf_list: "{{ groups['leaf'] }}"
+        config_file: "{{ lookup('file', '../../group_vars/{{ inventory_hostname }}/{{ containers }}') }}"
+        state: 'up'
+
+    - name: Install lldp package inside the containers
+      shell: "{{ item }}"
+      with_items:
+        - docker exec -i {{ containers }} apt-get update
+        - docker exec -i {{ containers }} apt-get install -y lldpd
+        - docker exec -i {{ containers }} service lldpd start
+
+
+- hosts: leaf[0]:spine
+  become: yes
+
+  vars:
+    - containers: 'L0_vlan_single'
+
+  tasks:
+    - file:
+        path: "{{ vlan_log_dir }}"
+        state: directory
+
+    - name: Test vlan configuration single vlan tagged packets
+      test_vlan_configuration_ping:
+        switch_name: "{{ inventory_hostname }}"
+        container: "{{ containers }}"
+        ping_switch: "none"
+        switch_list: "{{ groups['spine'] }}"
+        eth_list: "1,21"
+        tagged: True
+        lldp: True
+        hash_name: "{{ hostvars['server_emulator']['hash_name'] }}"
+        log_dir_path: "{{ vlan_log_dir }}"
+      register: module_out
+
+    - command: "date +%Y%m%d%T"
+      register: end_time
+
+    - name: Fetch the log file
+      slurp:
+        src: "{{ module_out.log_file_path }}"
+      register: logs
+
+    - name: Store the test result in a hash in redis db on server emulator
+      store_result_in_redis:
+        hash_name: "{{ hostvars['server_emulator']['hash_name'] }}"
+        start_time: "{{ hostvars['server_emulator']['start_time'] }}"
+        end_time: "{{ end_time.stdout }}"
+        hash_dict: "{{ module_out.hash_dict }}"
+        log_content: "{{ logs['content'] | b64decode }}"
+      delegate_to: 127.0.0.1
+
+    - copy:
+        src: "../../files/show_tech.py"
+        dest: /tmp/show_tech.py
+        mode: 0755
+      when: module_out.hash_dict['result.status'] == "Failed"
+      ignore_errors: yes
+
+    - command: "/tmp/./show_tech.py --path /var/log/show_tech/ --hash_name {{ hostvars['server_emulator']['hash_name'] }}"
+      when: module_out.hash_dict['result.status'] == "Failed"
+      ignore_errors: yes
+
+    - file:
+        path: /tmp/show_tech.py
+        state: absent
+      when: module_out.hash_dict['result.status'] == "Failed"
+      ignore_errors: yes
+
+
+- hosts: leaf[1]:spine
+  become: yes
+
+  vars:
+    - containers: 'L1_vlan_single'
+
+  tasks:
+    - file:
+        path: "{{ vlan_log_dir }}"
+        state: directory
+
+    - name: Test vlan configuration single vlan tagged packets
+      test_vlan_configuration_ping:
+        switch_name: "{{ inventory_hostname }}"
+        container: "{{ containers }}"
+        ping_switch: "none"
+        switch_list: "{{ groups['spine'] }}"
+        eth_list: "19,3"
+        tagged: True
+        lldp: True
+        hash_name: "{{ hostvars['server_emulator']['hash_name'] }}"
+        log_dir_path: "{{ vlan_log_dir }}"
+      register: module_out
+
+    - command: "date +%Y%m%d%T"
+      register: end_time
+
+    - name: Fetch the log file
+      slurp:
+        src: "{{ module_out.log_file_path }}"
+      register: logs
+
+    - name: Store the test result in a hash in redis db on server emulator
+      store_result_in_redis:
+        hash_name: "{{ hostvars['server_emulator']['hash_name'] }}"
+        start_time: "{{ hostvars['server_emulator']['start_time'] }}"
+        end_time: "{{ end_time.stdout }}"
+        hash_dict: "{{ module_out.hash_dict }}"
+        log_content: "{{ logs['content'] | b64decode }}"
+      delegate_to: 127.0.0.1
+
+    - copy:
+        src: "../../files/show_tech.py"
+        dest: /tmp/show_tech.py
+        mode: 0755
+      when: module_out.hash_dict['result.status'] == "Failed"
+      ignore_errors: yes
+
+    - command: "/tmp/./show_tech.py --path /var/log/show_tech/ --hash_name {{ hostvars['server_emulator']['hash_name'] }}"
+      when: module_out.hash_dict['result.status'] == "Failed"
+      ignore_errors: yes
+
+    - file:
+        path: /tmp/show_tech.py
+        state: absent
+      when: module_out.hash_dict['result.status'] == "Failed"
+      ignore_errors: yes
+
+
+- hosts: spine[0]:leaf
+  become: yes
+
+  vars:
+    - containers: 'S0_vlan_single'
+
+  tasks:
+    - file:
+        path: "{{ vlan_log_dir }}"
+        state: directory
+
+    - name: Test vlan configuration single vlan tagged packets
+      test_vlan_configuration_ping:
+        switch_name: "{{ inventory_hostname }}"
+        container: "{{ containers }}"
+        ping_switch: "none"
+        switch_list: "{{ groups['leaf'] }}"
+        eth_list: "1,19"
+        tagged: True
+        lldp: True
+        hash_name: "{{ hostvars['server_emulator']['hash_name'] }}"
+        log_dir_path: "{{ vlan_log_dir }}"
+      register: module_out
+
+    - command: "date +%Y%m%d%T"
+      register: end_time
+
+    - name: Fetch the log file
+      slurp:
+        src: "{{ module_out.log_file_path }}"
+      register: logs
+
+    - name: Store the test result in a hash in redis db on server emulator
+      store_result_in_redis:
+        hash_name: "{{ hostvars['server_emulator']['hash_name'] }}"
+        start_time: "{{ hostvars['server_emulator']['start_time'] }}"
+        end_time: "{{ end_time.stdout }}"
+        hash_dict: "{{ module_out.hash_dict }}"
+        log_content: "{{ logs['content'] | b64decode }}"
+      delegate_to: 127.0.0.1
+
+    - copy:
+        src: "../../files/show_tech.py"
+        dest: /tmp/show_tech.py
+        mode: 0755
+      when: module_out.hash_dict['result.status'] == "Failed"
+      ignore_errors: yes
+
+    - command: "/tmp/./show_tech.py --path /var/log/show_tech/ --hash_name {{ hostvars['server_emulator']['hash_name'] }}"
+      when: module_out.hash_dict['result.status'] == "Failed"
+      ignore_errors: yes
+
+    - file:
+        path: /tmp/show_tech.py
+        state: absent
+      when: module_out.hash_dict['result.status'] == "Failed"
+      ignore_errors: yes
+
+
+- hosts: spine[1]:leaf
+  become: yes
+
+  vars:
+    - containers: 'S1_vlan_single'
+
+  tasks:
+    - file:
+        path: "{{ vlan_log_dir }}"
+        state: directory
+
+    - name: Test vlan configuration single vlan tagged packets
+      test_vlan_configuration_ping:
+        switch_name: "{{ inventory_hostname }}"
+        container: "{{ containers }}"
+        ping_switch: "none"
+        switch_list: "{{ groups['leaf'] }}"
+        eth_list: "21,3"
+        tagged: True
+        lldp: True
+        hash_name: "{{ hostvars['server_emulator']['hash_name'] }}"
+        log_dir_path: "{{ vlan_log_dir }}"
+      register: module_out
+
+    - command: "date +%Y%m%d%T"
+      register: end_time
+
+    - name: Fetch the log file
+      slurp:
+        src: "{{ module_out.log_file_path }}"
+      register: logs
+
+    - name: Store the test result in a hash in redis db on server emulator
+      store_result_in_redis:
+        hash_name: "{{ hostvars['server_emulator']['hash_name'] }}"
+        start_time: "{{ hostvars['server_emulator']['start_time'] }}"
+        end_time: "{{ end_time.stdout }}"
+        hash_dict: "{{ module_out.hash_dict }}"
+        log_content: "{{ logs['content'] | b64decode }}"
+      delegate_to: 127.0.0.1
+
+    - copy:
+        src: "../../files/show_tech.py"
+        dest: /tmp/show_tech.py
+        mode: 0755
+      when: module_out.hash_dict['result.status'] == "Failed"
+      ignore_errors: yes
+
+    - command: "/tmp/./show_tech.py --path /var/log/show_tech/ --hash_name {{ hostvars['server_emulator']['hash_name'] }}"
+      when: module_out.hash_dict['result.status'] == "Failed"
+      ignore_errors: yes
+
+    - file:
+        path: /tmp/show_tech.py
+        state: absent
+      when: module_out.hash_dict['result.status'] == "Failed"
+      ignore_errors: yes
+
+
+- hosts: leaf:spine
+  become: yes
+  tasks:
+    - include: ../../playbooks/get_goes_version_and_tags.yml
+
+
+- include: vlan_configuration_single_vlan_with_container_reset.yml
+  when: reset_config
+
+
+- hosts: server_emulator
+  become: true
+  tasks:
+    - name: Get the test result from redis db
+      get_test_result_from_redis:
+        hash_name: "{{ hostvars['server_emulator']['hash_name'] }}"
+      register: result
+
+    - debug:
+        msg: "Test case result: {{ result.result_status }}"
+
+    - debug:
+        msg: "Failure summary: {{ result.result_detail }}"
+
+    - lineinfile:
+        path: "{{ regression_summary_report }}"
+        line: "{{ hash_name }}: {{ result.result_status }}"
+
+
+- hosts: leaf:spine
+  become: true
+  tasks:
+    - include: ../../playbooks/get_goes_status.yml start_time={{ hostvars['server_emulator']['start_time'] }} hash_name={{ hostvars['server_emulator']['hash_name'] }}

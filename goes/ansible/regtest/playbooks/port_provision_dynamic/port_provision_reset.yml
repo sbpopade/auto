@@ -1,0 +1,34 @@
+---
+
+- hosts: leaf:spine
+  become: true
+  ignore_errors: yes
+  tasks:
+    - name: Delete any existing namespaces
+      shell: "ip netns | xargs -I {} sudo ip netns delete {}"
+
+    - name: Stop any existing iperf sessions
+      command: pkill iperf
+
+    - name: Copy default network interfaces file
+      template:
+        src: "../../files/{{inventory_hostname}}/network_interfaces_master"
+        dest: "{{ network_interfaces_file }}"
+
+    - name: Copy default goesd-platina-mk1-modprobe.conf
+      template:
+        src: "../../files/goesd-platina-mk1-modprobe.conf"
+        dest: "{{ goesd_modprobe_file }}"
+
+    - name: Execute commands
+      command: "{{ item }}"
+      with_items:
+      - 'rmmod platina-mk1'
+      - 'modprobe platina-mk1 provision=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1'
+      - 'goes restart'
+      - 'ifdown -a --allow vnet'
+      - 'ifup -a --allow vnet'
+
+    - name: Wait few seconds for GOES to come up
+      pause:
+        seconds: 5

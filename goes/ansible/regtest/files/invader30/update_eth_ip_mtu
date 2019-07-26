@@ -1,0 +1,2 @@
+ifconfig xeth5 192.168.5.30 netmask 255.255.255.0
+ifconfig xeth27 192.168.27.30 netmask 255.255.255.0

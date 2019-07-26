@@ -1,0 +1,27 @@
+---
+
+- hosts: leaf[0]:spine[0]
+  become: true
+  tasks:
+    - name: Install snmpd
+      apt:
+        name: snmpd
+
+    - name: Copy snmp-mibs-downloader to remote machine
+      copy:
+        src: ../../files/snmp-mibs-downloader_1.1+nmu1_all.deb
+        dest: /tmp/
+
+    - name: Install snmp-mibs-downloader 
+      apt: 
+        deb: /tmp/snmp-mibs-downloader_1.1+nmu1_all.deb
+
+    - name: wait few seconds to install snmp-mibs-downloader
+      pause:
+        seconds: 35
+
+    - name: Remove .deb from remote machine
+      file:
+        path: /tmp/snmp-mibs-downloader_1.1+nmu1_all.deb
+        state: absent
+

@@ -1,0 +1,102 @@
+---
+
+
+- hosts: leaf:spine
+  become: true
+  ignore_errors: yes
+  tasks:
+    - shell: dpkg --list | grep kernel
+      register: kernel_version
+
+    - debug:
+        var: kernel_version.stdout_lines
+
+
+- hosts: server_emulator
+  become: true
+
+  tasks:
+    - command: "date +%Y%m%d%T"
+      register: start_time
+
+    - set_fact:
+        hash_name: "regression_software_upgrade_03_{{ start_time.stdout }}"
+        start_time: "{{ start_time.stdout }}"
+
+
+- hosts: leaf:spine
+  become: true
+  tasks:
+    - file:
+        path: "{{ upgrade_log_dir }}"
+        state: directory
+
+#    - name: Download the goes installer file
+#      get_url:
+#        url: "{{ goes_installer_url }}"
+#        dest: "{{ goes_installer_dir }}{{ goes_installer_name }}"
+#        mode: 0755
+
+    - name: Copy upgrade and downgrade installer files
+      copy:
+        src: "../../files/{{ item }}"
+        dest: "{{ goes_installer_dir }}{{ item }}"
+        mode: 0755
+      with_items:
+      - "{{ goes_upgrade_installer_name }}"
+      - "{{ goes_downgrade_installer_name }}"
+
+    - name: Upgrade and downgrade goes
+      goes_upgrade_downgrade:
+        switch_name: "{{ inventory_hostname }}"
+        installer_dir: "{{ goes_installer_dir }}"
+        upgrade_installer_name: "{{ goes_upgrade_installer_name }}"
+        downgrade_installer_name: "{{ goes_downgrade_installer_name }}"
+        upgrade_version: "{{ lookup('file', '../../files/upgrade_version') }}"
+        downgrade_version: "{{ lookup('file', '../../files/downgrade_version') }}"
+        platina_redis_channel: "{{ platina_redis_channel }}"
+        hash_name: "{{ hostvars['server_emulator']['hash_name'] }}"
+        log_dir_path: "{{ upgrade_log_dir }}"
+      register: module_out
+
+    - command: "date +%Y%m%d%T"
+      register: end_time
+
+    - name: Fetch the log file
+      slurp:
+        src: "{{ module_out.log_file_path }}"
+      register: logs
+
+    - name: Store the test result in a hash in redis db on server emulator
+      store_result_in_redis:
+        hash_name: "{{ hostvars['server_emulator']['hash_name'] }}"
+        start_time: "{{ hostvars['server_emulator']['start_time'] }}"
+        end_time: "{{ end_time.stdout }}"
+        hash_dict: "{{ module_out.hash_dict }}"
+        log_content: "{{ logs['content'] | b64decode }}"
+      delegate_to: 127.0.0.1
+
+    - include: ../../playbooks/get_goes_version_and_tags.yml
+
+
+- hosts: server_emulator
+  become: true
+  tasks:
+    - name: Get the test result from redis db
+      get_test_result_from_redis:
+        hash_name: "{{ hostvars['server_emulator']['hash_name'] }}"
+      register: result
+
+    - name: Print test case result
+      debug:
+        msg: "Test case result: {{ result.result_status }}"
+
+    - name: Print failure summary
+      debug:
+        msg: "Summary: {{ result.result_detail }}"
+
+
+- hosts: leaf:spine
+  become: true
+  tasks:
+    - include: ../../playbooks/get_goes_status.yml start_time={{ hostvars['server_emulator']['start_time'] }} hash_name={{ hostvars['server_emulator']['hash_name'] }}

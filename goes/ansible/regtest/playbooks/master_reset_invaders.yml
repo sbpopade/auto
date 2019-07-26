@@ -1,0 +1,74 @@
+---
+
+- hosts: leaf:spine
+  become: true
+  ignore_errors: yes
+  tasks:
+    - name: Delete any existing namespaces
+      shell: "ip netns | xargs -I {} sudo ip netns delete {}"
+
+    - name: Stop any existing iperf sessions
+      command: pkill iperf
+
+    - name: Stop and remove any existing docker containers
+      shell: "{{ item }}"
+      with_items:
+      - "docker stop $(docker ps -a -q)"
+      - "docker rm $(docker ps -a -q)"
+
+    - name: Remove docker_move and docker-compose files
+      file:
+        path: "{{ item }}"
+        state: absent
+      with_items:
+      - "~/docker_move.sh"
+      - "{{ docker_compose_file }}"
+
+    - shell: rm -rf ~/volumes/quagga/*
+
+    - name: Copy default network interfaces file
+      template:
+        src: "../files/{{inventory_hostname}}/network_interfaces_master"
+        dest: "{{ network_interfaces_file }}"
+
+    - name: Copy default goesd-platina-mk1-modprobe.conf file
+      copy:
+        src: "../files/goesd-platina-mk1-modprobe.conf"
+        dest: "/etc/modprobe.d/goesd-platina-mk1-modprobe.conf"
+
+    - name: Update interfaces file for fiber ports
+      test_fiber_ports:
+        cmd : "1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1"
+      register: fmodule_out
+
+    - name: Execute commands
+      command: "{{ item }}"
+      with_items:
+      - 'rmmod platina-mk1'
+      - 'modprobe platina-mk1 provision=1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1'
+      - 'ifdown -a --allow vnet'
+      - 'ifup -a --allow vnet'
+      - 'goes restart'
+
+    - name: Wait few seconds for GOES to come up
+      pause:
+        seconds: 15
+
+    - include: get_goes_status.yml
+
+    - name: Verify link status b/w invaders
+      verify_links:
+        switch_name: "{{ inventory_hostname }}"
+        leaf_list: "{{ groups['leaf'] }}"
+        eth_list: "1,3,5,7,9,11,13,15,17,19,21,23,25,27,29,31"
+        platina_redis_channel: "{{ platina_redis_channel }}"
+      register: module_out
+
+    - name: Print Link Status
+      debug:
+        var: module_out
+
+    - lineinfile:
+        path: "{{ regression_summary_report }}"
+        line: "Links Status {{ inventory_hostname }}: {{ module_out.msg }}"
+      delegate_to: 127.0.0.1

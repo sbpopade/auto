@@ -1,0 +1,11 @@
+---
+container_name: S1_vlan_multiple
+interface1: 3
+interface2: 3
+interface3: 21
+interface4: 21
+vlan_id1: 3
+vlan_id2: 4
+vlan_id3: 21
+vlan_id4: 22
+

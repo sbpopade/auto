@@ -1,0 +1,42 @@
+---
+
+# Uninstall packages stack
+- include: playbooks/installation/uninstall_packages.yml
+
+
+# Reset invaders
+- include: playbooks/master_reset_invaders.yml
+
+
+# Run all vlan test cases
+- include: playbooks/vlan/vlan_configuration_single_vlan.yml
+
+- include: playbooks/vlan/vlan_configuration_multiple_vlans.yml
+
+- include: playbooks/vlan/vlan_configuration_arping_vlan_interfaces_and_physical_interfaces.yml
+
+- include: playbooks/vlan/vlan_configuration_on_transit_vlan_interfaces.yml
+
+# Reset invaders
+- include: playbooks/master_reset_invaders.yml
+
+- include: playbooks/vlan/vlan_configuration_dhcp_vlan_interfaces_and_physical_interfaces.yml
+
+- include: playbooks/vlan/vlan_configuration_lldp_vlan_interfaces_and_physical_interfaces.yml
+
+# Uninstall packages stack
+- include: playbooks/installation/uninstall_packages.yml
+
+# Reset invaders
+- include: playbooks/master_reset_invaders.yml
+
+# Install quagga
+- include: playbooks/installation/quagga_install.yml
+
+# Run all vlan with container test cases
+- include: playbooks/vlan_container/vlan_configuration_single_vlan_with_container.yml
+
+- include: playbooks/vlan_container/vlan_configuration_multiple_vlan_with_container.yml
+
+- include: playbooks/vlan_container/vlan_configuration_dhcp_vlan_container.yml
+

@@ -1,0 +1,161 @@
+---
+
+- hosts: leaf:spine
+  become: true
+  ignore_errors: yes
+  tasks:
+    - shell: dpkg --list | grep kernel
+      register: kernel_version
+
+    - debug:
+        var: kernel_version.stdout_lines
+
+
+- hosts: server_emulator
+  become: true
+
+  tasks:
+    - command: "date +%Y%m%d%T"
+      register: start_time
+
+    - set_fact:
+        hash_name: "issue_56_vnet_show_ip_fib_summary{{ start_time.stdout }}"
+        start_time: "{{ start_time.stdout }}"
+
+
+- hosts: spine[1]
+  become: true
+
+  vars:
+    - containers:
+        container1: 'issue56_1'
+        container2: 'issue56_2'
+
+  tasks:
+    - file:
+        path: "{{ issues_log_dir }}"
+        state: directory
+
+    - file:
+        path: "~/volumes/quagga/{{ item }}"
+        state: directory
+      with_items:
+      - "{{ containers.container1 }}"
+      - "{{ containers.container2 }}"
+
+    - name: Pull quagga container image from dockerhub
+      command: "docker pull stigt/debian-quagga:latest"
+
+    - name: Install docker compose
+      shell: "curl -L https://github.com/docker/compose/releases/download/1.17.0/docker-compose-`uname -s`-`uname -m` -o /usr/local/bin/docker-compose"
+
+    - name: Make docker-compose file executable
+      shell: "chmod +x /usr/local/bin/docker-compose"
+
+    - name: Add docker_move.sh
+      copy:
+        src: ../../templates/docker_move.sh
+        dest: "~/docker_move.sh"
+        owner: root
+        group: root
+        mode: 0755
+
+    - name: Run docker-compose up
+      shell: "docker run --rm --privileged=true -P --hostname={{ item }} --name={{ item }} -d -v $(pwd)/volumes/quagga/{{ item }}:/etc/quagga stigt/debian-quagga:latest"
+      args:
+        chdir: ~/
+      with_items:
+      - "{{ containers.container1 }}"
+      - "{{ containers.container2 }}"
+
+    - name: Move interface and verify FIB entries
+      test_fib_sum:
+        switch_name: "{{ inventory_hostname }}"
+        container_name: "{{ containers.container1 }},{{ containers.container2 }}"
+        eth: '5,7'
+        hash_name: "{{ hostvars['server_emulator']['hash_name'] }}"
+        log_dir_path: "{{ issues_log_dir }}"
+      register: module_out
+
+    - command: "date +%Y%m%d%T"
+      register: end_time
+
+    - name: Fetch the log file
+      slurp:
+        src: "{{ module_out.log_file_path }}"
+      register: logs
+
+    - name: Store the test result in a hash in redis db on server emulator
+      store_result_in_redis:
+        hash_name: "{{ hostvars['server_emulator']['hash_name'] }}"
+        start_time: "{{ hostvars['server_emulator']['start_time'] }}"
+        end_time: "{{ end_time.stdout }}"
+        hash_dict: "{{ module_out.hash_dict }}"
+        log_content: "{{ logs['content'] | b64decode }}"
+      delegate_to: 127.0.0.1
+
+    - copy:
+        src: "../../files/show_tech.py"
+        dest: /tmp/show_tech.py
+        mode: 0755
+      when: module_out.hash_dict['result.status'] == "Failed"
+      ignore_errors: yes
+
+    - command: "/tmp/./show_tech.py --path /var/log/show_tech/ --hash_name {{ hostvars['server_emulator']['hash_name'] }}"
+      when: module_out.hash_dict['result.status'] == "Failed"
+      ignore_errors: yes
+
+    - file:
+        path: /tmp/show_tech.py
+        state: absent
+      when: module_out.hash_dict['result.status'] == "Failed"
+      ignore_errors: yes
+
+    - name: Run docker-compose down
+      shell: "docker stop {{ item }}"
+      args:
+        chdir: ~/
+      with_items:
+      - "{{ containers.container1 }}"
+      - "{{ containers.container2 }}"
+
+    - name: Remove docker-compose files
+      file:
+        path: "~/docker_move.sh"
+        state: absent
+
+    - name: Restart goes
+      command: "goes restart"
+
+    - name: Wait few seconds for goes to restart
+      pause:
+        seconds: 10
+
+    - include: ../../playbooks/get_goes_version_and_tags.yml
+
+
+- hosts: server_emulator
+  become: true
+  tasks:
+    - name: Get the test result from redis db
+      get_test_result_from_redis:
+        hash_name: "{{ hostvars['server_emulator']['hash_name'] }}"
+      register: result
+
+    - name: Print test case result
+      debug:
+        msg: "Test case result: {{ result.result_status }}"
+
+    - name: Print failure summary
+      debug:
+        msg: "Failure summary: {{ result.result_detail }}"
+
+    - lineinfile:
+        path: "{{ regression_summary_report }}"
+        line: "{{ hash_name }}: {{ result.result_status }}"
+
+
+- hosts: leaf:spine
+  become: true
+  tasks:
+    - include: ../../playbooks/get_goes_status.yml start_time={{ hostvars['server_emulator']['start_time'] }} hash_name={{ hostvars['server_emulator']['hash_name'] }}

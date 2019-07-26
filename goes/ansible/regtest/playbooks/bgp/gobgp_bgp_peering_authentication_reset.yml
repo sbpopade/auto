@@ -1,0 +1,31 @@
+---
+
+- hosts: leaf:spine
+  become: true
+  ignore_errors: yes
+  tasks:
+    - name: Remove config file
+      file:
+        path: "{{ gobgp_bgp_conf_file }}"
+        state: absent
+
+    - name: Execute commands
+      command: "{{ item }}"
+      with_items:
+      - 'goes restart'
+
+    - name: Wait few seconds for GOES to come up
+      pause:
+        seconds: 10
+
+    - name: Delete advertised routes
+      command: "gobgp global rib -a ipv4 del 192.168.{{item}}.1/32"
+      with_items:
+      - 29
+      - 30
+      - 31
+      - 32
+      - 42
+      - 43
+      - 44
+      - 45

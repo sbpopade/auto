@@ -1,0 +1,180 @@
+---
+
+- hosts: leaf:spine
+  become: true
+  ignore_errors: yes
+  tasks:
+    - shell: dpkg --list | grep kernel
+      register: kernel_version
+      when: not dry_run
+
+    - debug:
+        var: kernel_version.stdout_lines
+      when: not dry_run
+
+
+- hosts: server_emulator
+  become: true
+
+  tasks:
+    - command: "date +%Y%m%d%T"
+      register: start_time
+
+    - set_fact:
+        hash_name: "quagga_bgp_ecmp_loadbalancing_paths_{{ start_time.stdout }}"
+        start_time: "{{ start_time.stdout }}"
+
+
+- hosts: leaf:spine
+  become: true
+  tasks:
+    - name: Take backup of /etc/quagga/bgpd.conf
+      copy:
+        src: "{{ quagga_bgp_conf_file }}"
+        dest: "{{ quagga_bgp_conf_file_bck }}"
+        remote_src: true
+      when: not dry_run
+
+    - name: Add dummy interface
+      add_dummy_interface:
+        switch_name: "{{ inventory_hostname }}"
+      when: not dry_run
+
+    - name: Add bgp config in /etc/quagga/bgpd.conf
+      blockinfile:
+        path: "{{ quagga_bgp_conf_file }}"
+        marker: ""
+        block: "{{ lookup('file', '../../files/{{inventory_hostname}}/bgp_ecmp_loadbalancing_paths.conf') }}"
+      when: not dry_run
+
+    - name: Restart quagga
+      service:
+        name: quagga
+        state: restarted
+      when: not dry_run
+
+    - file:
+        path: "{{ bgp_log_dir }}"
+        state: directory
+      when: not dry_run
+
+    - name: Verify quagga bgp ecmp loadbalancing paths
+      test_bgp_ecmp_loadbalancing:
+        switch_name: "{{ inventory_hostname }}"
+        spine_list: "{{ groups['spine'] }}"
+        leaf_list: "{{ groups['leaf'] }}"
+        package_name: "quagga"
+        hash_name: "{{ hostvars['server_emulator']['hash_name'] }}"
+        log_dir_path: "{{ bgp_log_dir }}"
+      register: module_out
+      when: not dry_run
+
+    - name: Verify quagga bgp ecmp loadbalancing paths
+      test_bgp_ecmp_loadbalancing:
+        switch_name: "{{ inventory_hostname }}"
+        spine_list: "{{ groups['spine'] }}"
+        leaf_list: "{{ groups['leaf'] }}"
+        package_name: "quagga"
+        hash_name: "{{ hostvars['server_emulator']['hash_name'] }}"
+        log_dir_path: "{{ bgp_log_dir }}"
+        dry_run_mode: "{{ dry_run }}"
+      register: dry_run_out
+      delegate_to: 127.0.0.1
+      when: dry_run
+
+    - set_fact:
+        dry_run_cmds: "{{ dry_run_out.cmds }}"
+      when: dry_run
+
+    - command: "date +%Y%m%d%T"
+      register: end_time
+      when: not dry_run
+
+    - name: Fetch the log file
+      slurp:
+        src: "{{ module_out.log_file_path }}"
+      register: logs
+      when: not dry_run
+
+    - name: Store the test result in a hash in redis db on server emulator
+      store_result_in_redis:
+        hash_name: "{{ hostvars['server_emulator']['hash_name'] }}"
+        start_time: "{{ hostvars['server_emulator']['start_time'] }}"
+        end_time: "{{ end_time.stdout }}"
+        hash_dict: "{{ module_out.hash_dict }}"
+        log_content: "{{ logs['content'] | b64decode }}"
+      delegate_to: 127.0.0.1
+      ignore_errors: yes
+      when: not dry_run
+
+    - copy:
+        src: "../../files/show_tech.py"
+        dest: /tmp/show_tech.py
+        mode: 0755
+      when: module_out.hash_dict['result.status'] == "Failed"
+      ignore_errors: yes
+
+    - command: "/tmp/./show_tech.py --path /var/log/show_tech/ --hash_name {{ hostvars['server_emulator']['hash_name'] }}"
+      when: module_out.hash_dict['result.status'] == "Failed"
+      ignore_errors: yes
+
+    - file:
+        path: /tmp/show_tech.py
+        state: absent
+      when: module_out.hash_dict['result.status'] == "Failed"
+      ignore_errors: yes
+
+    - include: ../../playbooks/get_goes_version_and_tags.yml
+      when: not dry_run
+
+
+- include: quagga_bgp_ecmp_loadbalancing_paths_reset.yml
+  when:
+    - reset_config
+    - not dry_run
+
+
+- hosts: server_emulator
+  become: true
+  tasks:
+    - name: Get the test result from redis db
+      get_test_result_from_redis:
+        hash_name: "{{ hostvars['server_emulator']['hash_name'] }}"
+      register: result
+      when: not dry_run
+
+    - name: Print test case result
+      debug:
+        msg: "Test case result: {{ result.result_status }}"
+      when: not dry_run
+
+    - name: Print failure summary
+      debug:
+        msg: "Failure summary: {{ result.result_detail }}"
+      when: not dry_run
+
+    - lineinfile:
+        path: "{{ regression_summary_report }}"
+        line: "{{ hash_name }}: {{ result.result_status }}"
+      when: not dry_run
+
+
+- hosts: leaf:spine
+  vars:
+    config_file: "{{ lookup('file', '../../files/{{inventory_hostname}}/bgp_ecmp_loadbalancing_paths.conf') }}"
+  become: true
+  tasks:
+    - include: ../../playbooks/get_goes_status.yml start_time={{ hostvars['server_emulator']['start_time'] }} hash_name={{ hostvars['server_emulator']['hash_name'] }}
+      when: not dry_run
+
+    - name: Print config file
+      debug:
+        var: config_file
+      when: dry_run
+      delegate_to: 127.0.0.1
+
+    - name: Print dry run output
+      debug:
+        var: dry_run_cmds
+      when: dry_run
+      delegate_to: 127.0.0.1

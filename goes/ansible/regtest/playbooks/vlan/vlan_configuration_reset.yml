@@ -1,0 +1,21 @@
+---
+
+- hosts: leaf:spine
+  become: true
+  ignore_errors: yes
+  tasks:
+    - name: Copy default network interfaces file
+      template:
+        src: "../../files/{{inventory_hostname}}/network_interfaces_master"
+        dest: "{{ network_interfaces_file }}"
+
+    - name: Execute commands
+      command: "{{ item }}"
+      with_items:
+      - 'ifdown -a --allow vnet'
+      - 'ifup -a --allow vnet'
+      - 'goes restart'
+
+    - name: Wait few seconds for GOES to come up
+      pause:
+        seconds: 10

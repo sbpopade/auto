@@ -1,0 +1,23 @@
+---
+
+# Reset invaders
+- include: playbooks/master_reset_invaders.yml
+
+
+# Run all docker containerized test cases
+- include: playbooks/docker/quagga_ospf_traffic.yml
+
+# Reset invaders
+- include: playbooks/master_reset_invaders.yml
+
+- include: playbooks/docker/quagga_ospf_traffic_vlan.yml
+
+- include: playbooks/docker/quagga_ospf_traffic_subports.yml
+
+# Uninstall packages stack
+- include: playbooks/installation/uninstall_packages.yml
+
+
+# Reset the setup
+- include: playbooks/master_reset_invaders.yml
+

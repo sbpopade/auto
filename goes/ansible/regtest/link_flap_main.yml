@@ -1,0 +1,18 @@
+---
+
+# Uninstall packages stack
+- include: playbooks/installation/uninstall_packages.yml
+
+
+# Reset the setup
+- include: playbooks/master_reset_invaders.yml
+
+
+# Run all link flap test cases
+- include: playbooks/link_flap/link_flap_100g.yml
+
+- include: playbooks/link_flap/link_flap_10g_lane1count4.yml
+
+- include: playbooks/link_flap/link_flap_25g_lane1count4.yml
+
+- include: playbooks/link_flap/link_flap_50g_lane2count2.yml

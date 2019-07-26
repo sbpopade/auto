@@ -1,0 +1,6 @@
+ansible_ssh_user1: sandeep
+ansible_ssh_pass: cals0ft
+ansible_sudo_pass: cals0ft
+platina_ssh_user: platina
+platina_ssh_pass: regressi0n
+platina_sudo_pass: regressi0n

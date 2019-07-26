@@ -1,0 +1,12 @@
+---
+
+# Reset invaders
+- include: playbooks/master_reset_invaders.yml
+
+# Uninstall packages stack
+- include: playbooks/installation/uninstall_packages.yml
+
+# Run all SNMP test cases
+- include: playbooks/snmp/snmp_polling_v2_community.yml
+
+#- include: playbooks/snmp/snmp_trap_v2_community.yml

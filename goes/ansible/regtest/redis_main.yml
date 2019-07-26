@@ -1,0 +1,19 @@
+---
+
+# Uninstall packages stack
+- include: playbooks/installation/uninstall_packages.yml
+
+
+# Reset invaders
+- include: playbooks/master_reset_invaders.yml
+
+
+# Run all redis test cases
+- include: playbooks/redis/regression_01.yml
+
+- include: playbooks/redis/regression_02.yml
+
+- include: playbooks/redis/regression_03.yml
+
+- include: playbooks/redis/regression_04.yml
+
